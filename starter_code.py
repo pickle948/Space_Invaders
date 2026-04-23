@@ -14,51 +14,192 @@ FPS = 60
 clock = pygame.time.Clock()
 
 #Define Classes
-class Game():
+class Game:
     """A class to help control and update gameplay"""
 
     def __init__(self, player, alien_group, player_bullet_group, alien_bullet_group):
         """Initialize the game"""
-        pass
+        #Set game values
+        self.round_number = 1
+        self.score = 0
+
+        self.player = player
+        self.alien_group = alien_group
+        self.player_bullet_group = player_bullet_group
+        self.alien_bullet_group = alien_bullet_group
+
+        #Set sounds and music
+        self.new_round_sound = pygame.mixer.Sound('new_round.wav')
+        self.breach_sound = pygame.mixer.Sound('breach.wav')
+        self.alien_hit_sound = pygame.mixer.Sound('alien_hit.wav')
+        self.player_hit_sound = pygame.mixer.Sound('player_hit.wav')
+
+        #Set font
+        self.font = pygame.font.Font('Facon.ttf', 32)
+
 
     def update(self):
         """Update the game"""
-        pass
+        self.shift_aliens()
+        self.check_collisions()
+        self.check_round_completion()
+
 
     def draw(self):
         """Draw the HUD and other information to display"""
-        pass
+        WHITE = (255, 255, 255)
+
+        # Set text
+        score_text = self.font.render(f"Score: {self.score}", True, WHITE)
+        score_rect = score_text.get_rect()
+        score_rect.centerx = WINDOW_WIDTH // 2
+        score_rect.top = 10
+
+        round_text = self.font.render(f"Round: {self.round_number}", True, WHITE)
+        round_rect = round_text.get_rect()
+        round_rect.topleft = (20, 10)
+
+        lives_text = self.font.render(f"Lives: {self.player.lives}", True, WHITE)
+        lives_rect = lives_text.get_rect()
+        lives_rect.topright = (WINDOW_WIDTH - 20, 10)
+
+        #Blit the HUD to the display
+        display_surface.blit(score_text, score_rect)
+        display_surface.blit(round_text, round_rect)
+        display_surface.blit(lives_text, lives_rect)
+        pygame.draw.line(display_surface, WHITE, (0, 50), (WINDOW_WIDTH, 50), 4)
+        pygame.draw.line(display_surface, WHITE, (0, WINDOW_HEIGHT-100), (WINDOW_WIDTH, WINDOW_HEIGHT-100), 4)
+
 
     def shift_aliens(self):
         """Shift a wave of aliens down the screen and reverse direction"""
-        pass
+        # Determine if alien group has hit an edge
+        shift = False
+        for alien in (self.alien_group.sprites()):
+            if alien.rect.left <= 0 or alien.rect.right >= WINDOW_WIDTH:
+                shift = True
+
+        # Shift every alien down, change direction, and check for a breach
+        if shift:
+            breach = False
+            for alien in (self.alien_group.sprites()):
+                # Shift down
+                alien.rect.y += 10 * self.round_number
+
+                # Reverse the direction and move the alien off the edge so 'shift' doesn't trigger
+                alien.direction *= -1
+                alien.rect.x += alien.direction * alien.velocity
+
+                # Check if an alien reached the ship
+                if alien.rect.bottom >= WINDOW_HEIGHT - 100:
+                    breach = True
+
+            # Aliens breached the line
+            if breach:
+                self.breach_sound.play()
+                self.player.lives -= 1
+                self.check_game_status("Aliens breach the line", "Press 'Enter' to continue")
 
 
     def check_collisions(self):
         """Check for collisions"""
-        pass
+        #See if any bullet in the player bullet group hits an alien in the alien group
+        if pygame.sprite.groupcollide(self.player_bullet_group, self.alien_group, True, True):
+            self.alien_hit_sound.play()
+            self.score += 100
+
+        #See if the player has collided with any bullet in the alien bullet group
+        if pygame.sprite.spritecollide(self.player, self.alien_bullet_group, True):
+            self.player_hit_sound.play()
+            self.player.lives -= 1
+            self.check_game_status("You've been hit!", "Press 'Enter' to continue")
+
 
     def check_round_completion(self):
         """Check to see if a player has completed a single round"""
-        pass
+        if not (self.alien_group):
+            self.score += 1000 * self.round_number
+            self.round_number += 1
+            self.start_new_round()
 
 
     def start_new_round(self):
         """Start a new round"""
-        pass
+        # Create a grid of Aliens 11 columns and 5 rows.
+        for col in range(11):
+            for row in range(5):
+                alien = Alien(64 + col * 64, 64 + row * 64, self.round_number, self.alien_bullet_group)
+                self.alien_group.add(alien)
+
+        # Pause the game and prompt user to start
+        self.new_round_sound.play()
+        self.pause_game(f"Space Invaders Round {self.round_number}", "Press 'Enter' to begin")
+
 
     def check_game_status(self, main_text, sub_text):
         """Check to see the status of the game and how the player died"""
-        pass
+        self.alien_bullet_group.empty()
+        self.player_bullet_group.empty()
+        self.player.reset()
+        for alien in self.alien_group:
+            alien.reset()
+
+        if self.player.lives == 0:
+            self.reset_game()
+        else:
+            self.pause_game(main_text, sub_text)
 
 
     def pause_game(self, main_text, sub_text):
         """Pauses the game"""
-        pass
+        global running
+
+        # Set Colors
+        WHITE = (255, 255, 255)
+        BLACK = (0, 0, 0)
+
+        # Create main pause text
+        main_text = self.font.render(main_text, True, WHITE)
+        main_rect = main_text.get_rect()
+        main_rect.center = (WINDOW_WIDTH // 2, WINDOW_HEIGHT // 2)
+
+        #Create sub pause text
+        sub_text = self.font.render(sub_text, True, WHITE)
+        sub_rect = sub_text.get_rect()
+        sub_rect.center = (WINDOW_WIDTH // 2, WINDOW_HEIGHT // 2 + 64)
+
+        #Blit the pause text
+        display_surface.fill(BLACK)
+        display_surface.blit(main_text, main_rect)
+        display_surface.blit(sub_text, sub_rect)
+        pygame.display.update()
+
+        #Pause the game until the user hits enter
+        is_paused = True
+        while is_paused:
+            for event in pygame.event.get():
+                if event.type == pygame.KEYDOWN:
+                    if event.key == pygame.K_RETURN:
+                        is_paused = False
+                if event.type == pygame.QUIT:
+                    is_paused = False
+                    running = False
+
 
     def reset_game(self):
         """Reset the game"""
-        pass
+        # Start a new game
+        self.pause_game(f"Final Score: {self.score}", "Press 'Enter' to play again")
+
+        self.score = 0
+        self.round_number = 1
+        self.player.lives = 5
+
+        self.alien_group.empty()
+        self.alien_bullet_group.empty()
+        self.player_bullet_group.empty()
+
+        self.start_new_round()
 
 
 class Player(pygame.sprite.Sprite):
@@ -169,7 +310,7 @@ class AlienBullet(pygame.sprite.Sprite):
         """Initialize the bullet"""
         super().__init__()
         self.image = pygame.image.load('red_laser.png')
-        self.image = self.image.get_rect()
+        self.rect = self.image.get_rect()
         self.rect.centerx = x
         self.rect.centery = y
 
@@ -215,25 +356,18 @@ while running:
     my_player_group.draw(display_surface)
     my_player_group.update()
 
-    # TODO: repeat the last 2 todo's with my_alien_group instead of my_player_group
     my_alien_group.draw(display_surface)
     my_alien_group.update()
-    # TODO: repeat the last 2 todo's with my_player_bullet_group
     my_player_bullet_group.draw(display_surface)
     my_player_bullet_group.update()
-    # TODO: repeat the last 2 todo's with my_alien_bullet_group
     my_alien_bullet_group.draw(display_surface)
     my_alien_bullet_group.update()
 
     #Update and draw Game object
-    # TODO: call my_game.update() with no arguments
-    # TODO: call my_game.draw() with no arguments
     my_game.update()
     my_game.draw()
 
     #Update the display and tick clock
-    # TODO: call pygame.display.update() with no arguments
-    # TODO: call clock.tick() with FPS as its only argument
     pygame.display.update()
     clock.tick(FPS)
 
